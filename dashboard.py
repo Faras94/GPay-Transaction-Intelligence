@@ -373,7 +373,7 @@ st.markdown("""
 # ================== HEADER ==================
 st.markdown("""
 <div class="main-header">
-    <h1>GPay Transaction Intelligence</h1>
+    <h1>GPay Transaction Intelligence v1.0</h1>
     <p>Enterprise-grade financial analytics and insights platform</p>
 </div>
 """, unsafe_allow_html=True)
