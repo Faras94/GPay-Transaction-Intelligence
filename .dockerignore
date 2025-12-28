@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+requirements-dev.txt
+.flake8
+pyproject.toml
+.editorconfig
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Uploads and cache (keep structure but not content)
+uploads/*
+!uploads/.gitkeep
+embed_cache/*
+!embed_cache/.gitkeep
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.log
+*.tmp
+tmp/
