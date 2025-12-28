@@ -206,7 +206,8 @@ def query_rag(question: str):
         
         if structured_context:
             context = structured_context
-            sources = [{"type": "structured_db_query", "text": "Full DataFrame Filter Match", "cosine_score": 1.0, "rerank_score": 10.0}]
+            # Expose the actual context in the source for debugging/verification
+            sources = [{"type": "structured_db_query", "text": structured_context, "cosine_score": 1.0, "rerank_score": 10.0}]
         else:
             # STRATEGY 2: Standard Vector Search (Fallback)
             # Retrieve documents
@@ -226,19 +227,19 @@ def query_rag(question: str):
             context = "\n\n".join([d["text"] for d in reranked])
         
         # Call LLM
-        prompt = f"""You are an expert Financial Analyst Assistant. Your goal is to answer queries strictly based on the provided transaction data context.
+        prompt = f"""You are an expert Financial Analyst Assistant analyzing transaction data.
 
 Context Data:
 {context}
 
 User Question: {question}
 
-Guidelines:
-1. ANSWER ONLY based on the context above. Do not invent information.
-2. IF NO TRANSACTIONS MATCH the specific date, amount, or description requested, explicitly state: "No transactions found matching your criteria in the provided data."
-3. DATES: Pay close attention to dates. If the user asks for "Nov 29", do not list transactions from "Nov 6" unless explicitly asked for "Nov transactions".
-4. FORMATTING: Format all monetary values as ₹XX.XX. Use specific transaction descriptions.
-5. CONCISENESS: Be direct.
+Instructions:
+1. If the context starts with "Found X transactions", this means the data retrieval was SUCCESSFUL. Use this data to answer.
+2. Present the information clearly. If a list is provided, you can summarize or present it as requested.
+3. Format monetary values as ₹XX.XX.
+4. Be direct and helpful.
+5. ONLY say "no transactions found" if the context explicitly indicates no data was retrieved.
 
 Answer:"""
         
