@@ -49,6 +49,8 @@ def test_rag_end_to_end_mocked(mock_models, dummy_index):
     # Ensure environment variable for LLM API key handling
     if not os.getenv("OPENAI_API_KEY"):
          os.environ["OPENAI_API_KEY"] = "sk-dummy-key"
+    if not os.getenv("OPENROUTER_API_KEY"):
+         os.environ["OPENROUTER_API_KEY"] = "sk-dummy-key"
 
     query = "Coffee expenses"
     # Docs as strings, as expected by retrieve()
