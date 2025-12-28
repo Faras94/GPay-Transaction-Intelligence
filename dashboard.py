@@ -1056,48 +1056,65 @@ if uploaded_file or pdf_path or upload_method == "Manual Entry":
         # ================== RAG ==================
         if RAG_AVAILABLE:
             st.markdown("<h2 class='section-header'>Ask Questions</h2>", unsafe_allow_html=True)
-            st.info("Use natural language to query your transaction data")
             
-            col1, col2 = st.columns([4, 1])
+            # Initialize RAG silently if needed (and we have a valid source)
+            if "rag_initialized" not in st.session_state and (pdf_path or not df.empty):
+                # We can try to initialize. In the original flow, it might have been initialized.
+                # But here we ensure it.
+                if pdf_path:
+                    initialize_rag(df=df, source_file=pdf_path)
+                else:
+                    initialize_rag(df=df)
+                st.session_state.rag_initialized = True
+
+            # Initialize Messages History
+            if "messages" not in st.session_state:
+                st.session_state.messages = [
+                    {"role": "assistant", "content": "Hi! I'm your financial assistant. Ask me anything about your spending found in the statement."}
+                ]
             
-            with col1:
-                q = st.text_area(
-                    "Your question",
-                    placeholder="How much did I spend on food this month?",
-                    height=100,
-                    label_visibility="collapsed"
-                )
+            # Display Chat History
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
             
-            with col2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                ask_button = st.button("Ask", width="stretch")
-            
-            if ask_button and q:
-                with st.spinner("Thinking..."):
-                    result = query_rag(q)
-                    
-                    if isinstance(result, dict):
-                        answer = result.get("answer", "No answer generated.")
-                        sources = result.get("sources", [])
-                    else:
-                        answer = result
-                        sources = []
+            # Chat Input
+            if prompt := st.chat_input("Ask a question about your transactions..."):
+                # Add user message
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                
+                # Generate response
+                with st.chat_message("assistant"):
+                    with st.spinner("Analyzing..."):
+                        response = query_rag(prompt)
                         
-                    st.success("Answer:")
-                    st.markdown(answer)
-                    
-                    if sources:
-                        with st.expander("View Sources & Scores"):
-                            for i, source in enumerate(sources):
-                                score = source.get('cosine_score', 0.0)
-                                rerank = source.get('rerank_score', 0.0)
-                                match_type = source.get('type', 'semantic')
-                                text = source.get('text', '')
-                                
-                                st.markdown(f"**Source {i+1}** (Type: `{match_type}`)")
-                                st.markdown(f"Cosine Similarity: `{score:.4f}` | Rerank Score: `{rerank:.4f}`")
-                                st.code(text, language="text")
-                                st.divider()
+                        if isinstance(response, dict):
+                            ans = response.get("answer", "No answer generated.")
+                            sources = response.get("sources", [])
+                        else:
+                            ans = str(response)
+                            sources = []
+                        
+                        st.markdown(ans)
+                        
+                        # Show sources in an expander if available
+                        if sources:
+                            with st.expander("View Sources & Scores"):
+                                for i, src in enumerate(sources):
+                                    score = src.get('cosine_score', 0.0)
+                                    rerank = src.get('rerank_score', 0.0)
+                                    match_type = src.get('type', 'semantic')
+                                    text = src.get('text', '')
+                                    
+                                    st.markdown(f"**Source {i+1}** (Type: `{match_type}`)")
+                                    st.markdown(f"Cosine Similarity: `{score:.4f}` | Rerank Score: `{rerank:.4f}`")
+                                    st.code(text, language="text")
+                                    st.divider()
+
+                        # Add assistant response to history
+                        st.session_state.messages.append({"role": "assistant", "content": ans})
     
     except Exception as e:
         st.error(f"Something went wrong: {str(e)}")

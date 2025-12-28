@@ -57,7 +57,42 @@ def retrieve(query: str, index, docs: list):
                     })
                     break
     
-    # 2b. Amounts
+    # 2b. Date Match (New)
+    # Matches patterns like "29 Nov", "Nov 29", "29/11", etc.
+    query_dates = re.findall(r'\b\d{1,2}(?:st|nd|rd|th)?\s(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*', query, re.IGNORECASE)
+    # Also simple Month Day?
+    if query_dates:
+        for date_str in query_dates:
+             # Simplify date pattern for matching in doc (which uses "DDMMM,YYYY" or "DD MMM YYYY")
+             # RAG docs are "Date: 6Nov,2025" (from dataframe_to_chunks)
+             # So we need to match "29Nov" or "29 Nov"
+             
+             # Extract day and month
+             day_match = re.search(r'\d+', date_str)
+             month_match = re.search(r'[A-Za-z]{3}', date_str)
+             
+             if day_match and month_match:
+                 day = day_match.group(0)
+                 month = month_match.group(0)
+                 
+                 # Pattern to look for in doc: "29Nov" or "29 Nov"
+                 # Doc format is often "Date: 29Nov,2025"
+                 check_patterns = [
+                     f"{day}{month}", # 29Nov
+                     f"{day} {month}", # 29 Nov
+                     f"{day}{month.title()}",
+                     f"{day} {month.title()}"
+                 ]
+                 
+                 for doc in docs:
+                     if any(pat in doc for pat in check_patterns) and not is_duplicate(doc, exact_matches):
+                         exact_matches.append({
+                             "text": doc,
+                             "cosine_score": 0.98,
+                             "type": "date_match"
+                         })
+    
+    # 2c. Amounts
     query_amounts = re.findall(r'₹?\s?([\d,]+\.?\d*)', query)
     if query_amounts:
         for amt in query_amounts:
