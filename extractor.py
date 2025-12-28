@@ -20,16 +20,16 @@ from transaction_processing import (
     add_spending_insights,
     get_category_statistics,
     detect_unusual_transactions,
-    process_csv_data
+    process_csv_data,
 )
 
 __all__ = [
-    'TRANSACTION_CATEGORIES',
-    'categorize_transaction',
-    'get_category_emoji',
-    'extract_merchant_name',
-    'add_spending_insights',
-    'get_category_statistics',
-    'detect_unusual_transactions',
-    'process_csv_data'
+    "TRANSACTION_CATEGORIES",
+    "categorize_transaction",
+    "get_category_emoji",
+    "extract_merchant_name",
+    "add_spending_insights",
+    "get_category_statistics",
+    "detect_unusual_transactions",
+    "process_csv_data",
 ]
