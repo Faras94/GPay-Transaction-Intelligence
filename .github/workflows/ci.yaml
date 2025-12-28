@@ -28,7 +28,22 @@ jobs:
 
 
 
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-timeout
+
+      - name: Run RAG validation test
+        env:
+          CI: "true"
+          TRANSFORMERS_OFFLINE: "1"
+          OPENAI_API_KEY: "sk-dummy-key"  # Explicitly dummy since we mock calls
+        run: pytest -q tests/validation_rag.py
+
       - name: Import dashboard.py
+        env:
+          CI: "true"
+          TRANSFORMERS_OFFLINE: "1"
         run: |
           python - << 'EOF'
           import dashboard
@@ -36,4 +51,7 @@ jobs:
           EOF
 
       - name: Streamlit check
+        env:
+          CI: "true"
+          TRANSFORMERS_OFFLINE: "1"
         run: streamlit --version
