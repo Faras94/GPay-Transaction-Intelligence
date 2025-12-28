@@ -103,6 +103,72 @@ def initialize_rag(file_path: str = None, df = None, source_file: str = None):
         return False, {"message": f"❌ Error: {str(e)}\n{traceback.format_exc()}"}
 
 
+def _generate_analytics_context(filtered, context_header):
+    """
+    Helper to generate advanced analytics context from a filtered DataFrame.
+    """
+    import pandas as pd
+    # 1. Exact Totals
+    total_spent = filtered[filtered['Type'] == 'Spent']['Amount (₹)'].sum()
+    total_received = filtered[filtered['Type'] == 'Received']['Amount (₹)'].sum()
+    txn_count = len(filtered)
+    
+    # 2. Category Breakdown
+    cat_summary = ""
+    if 'Category' in filtered.columns:
+        cat_stats = filtered[filtered['Type'] == 'Spent'].groupby('Category')['Amount (₹)'].sum().sort_values(ascending=False)
+        cat_list = []
+        for cat, amt in cat_stats.head(5).items():
+            cat_list.append(f"- {cat}: ₹{amt:,.2f}")
+        if not cat_list:
+            cat_list.append("- No category data available")
+        cat_summary = "Top Categories (Spending):\n" + "\n".join(cat_list)
+
+    # 3. Smart Listing (Up to 200 items)
+    lines = []
+    limit = 200 
+    
+    sorted_filtered = filtered.sort_values(by='Date', ascending=False)
+    
+    for i, row in sorted_filtered.iterrows():
+        desc = row.get("Description", "Txn")
+        if len(desc) > 30: desc = desc[:28] + ".."
+        
+        amt = row.get("Amount (₹)", 0)
+        date = row.get("Date").strftime("%d %b %Y") if pd.notnull(row.get("Date")) else ""
+        cat = row.get("Category", "-")
+        t_type = row.get("Type", "Spent")
+        type_icon = "🔴" if t_type == "Spent" else "🟢"
+        
+        lines.append(f"| {date} | {desc} | {type_icon} ₹{amt:,.2f} | {cat} |")
+    
+    display_count = len(lines)
+    truncated = False
+    if display_count > limit:
+        lines = lines[:limit]
+        truncated = True
+    
+    context_body = "\n".join(lines)
+    
+    context_analytics = f"""
+=== SUMMARY STATISTICS (Calculated from full data) ===
+Total Spent: ₹{total_spent:,.2f}
+Total Received: ₹{total_received:,.2f}
+Net Flow: ₹{(total_received - total_spent):,.2f}
+Transaction Count: {txn_count}
+
+{cat_summary}
+"""
+    table_header = "| Date | Description | Type/Amount | Category |\n|---|---|---|---|"
+    
+    full_context = f"{context_header}\n{context_analytics}\n\n=== TRANSACTION LIST ({len(lines)} shown) ===\n{table_header}\n{context_body}"
+    
+    if truncated:
+        full_context += f"\n\n... (and {txn_count - limit} more transactions accounted for in Summary)"
+    
+    return full_context
+
+
 def query_structured_data(question: str):
     """
     Attempt to answer using direct DataFrame filtering (Hybrid Search).
@@ -115,34 +181,21 @@ def query_structured_data(question: str):
     import re
     import pandas as pd
     
-    # 1. Date Extraction (e.g., "29 Nov", "Nov 29", "29/11")
-    # Simple regex for finding a date. 
-    # Valid GPay formats: "29Nov", "29 Nov", "29 November"
+    # 1. Day Month Extraction (e.g. "22 Oct")
     # Matches: dd mon, dd month
     date_pattern = r'\b(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*'
-    match = re.search(date_pattern, question, re.IGNORECASE)
-    
-    if match:
-        day, month_str = match.groups()
-        # Normalize Month to Title case (Nov)
+    match_day = re.search(date_pattern, question, re.IGNORECASE)
+
+    if match_day:
+        day, month_str = match_day.groups()
         month = month_str[:3].title()
         
-        # Filter DF
-        # Expected Date column format in GLOBAL_DF is likely datetime objects IF processed, 
-        # BUT rags initialize often happens with the raw extracted DF or the processed one.
-        # In dashboard.py, we pass 'df' which has "Date" as datetime objects (pd.to_datetime).
-        
         try:
-             # We need to filter based on Day and Month
-             # This assumes GLOBAL_DF['Date'] is datetime. 
-             # Let's check safely.
              if not pd.api.types.is_datetime64_any_dtype(GLOBAL_DF['Date']):
-                 # Try converting temporary
                  temp_dates = pd.to_datetime(GLOBAL_DF['Date'], errors='coerce')
              else:
                  temp_dates = GLOBAL_DF['Date']
                  
-             # Map month name to number
              month_map = {name: i for i, name in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
              target_month_num = month_map.get(month)
              target_day = int(day)
@@ -152,35 +205,82 @@ def query_structured_data(question: str):
              filtered = GLOBAL_DF[mask]
              
              if not filtered.empty:
-                 # Construct specialized context
-                 # Limit to reasonable amount (e.g., 50) to avoid token overflow
-                 # If > 50, summarize
+                 return _generate_analytics_context(filtered, f"Found {len(filtered)} transactions on {day} {month} matching the query.")
+        except Exception:
+            pass
+
+    # 2. Month Year Extraction (e.g. "October 2025", "Oct 2025")
+    month_year_pattern = r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*,?\s*(\d{4})\b'
+    match_my = re.search(month_year_pattern, question, re.IGNORECASE)
+    
+    if match_my:
+        month_str, year_str = match_my.groups()
+        month = month_str[:3].title()
+        
+        try:
+             if not pd.api.types.is_datetime64_any_dtype(GLOBAL_DF['Date']):
+                 temp_dates = pd.to_datetime(GLOBAL_DF['Date'], errors='coerce')
+             else:
+                 temp_dates = GLOBAL_DF['Date']
                  
-                 lines = []
-                 total_amt = 0
-                 
-                 for i, row in filtered.iterrows():
-                     desc = row.get("Description", "Txn")
-                     amt = row.get("Amount (₹)", 0)
-                     time = row.get("Time", "")
-                     t_type = row.get("Type", "")
-                     
-                     lines.append(f"- {time}: {desc} | ₹{amt} ({t_type})")
-                     total_amt += float(amt) if isinstance(amt, (int, float)) else 0
-                 
-                 count = len(lines)
-                 context_header = f"Found {count} transactions on {day} {month} matching the query."
-                 context_body = "\n".join(lines[:60]) # Pass up to 60 transactions
-                 if count > 60:
-                     context_body += f"\n... (and {count-60} more)"
-                     
-                 context_summary = f"Total Volume on this day: ₹{total_amt:,.2f}"
-                 
-                 return f"{context_header}\n{context_summary}\n\nList:\n{context_body}"
+             month_map = {name: i for i, name in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
+             target_month_num = month_map.get(month)
+             target_year = int(year_str)
+             
+             # Apply Filter
+             mask = (temp_dates.dt.month == target_month_num) & (temp_dates.dt.year == target_year)
+             filtered = GLOBAL_DF[mask]
+             
+             if not filtered.empty:
+                 return _generate_analytics_context(filtered, f"Found {len(filtered)} transactions in {month} {year_str}.")
                  
         except Exception:
-            pass # Fallback to standard vector search if parsing fails
-            
+            pass
+
+    # 3. Month Only Extraction (e.g. "October", "in Oct")
+    # This runs ONLY if the specific Day/Year patterns above didn't trigger/return.
+    month_only_pattern = r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b'
+    match_mon = re.search(month_only_pattern, question, re.IGNORECASE)
+    
+    if match_mon:
+        month_str = match_mon.group(1)
+        month = month_str[:3].title()
+        
+        try:
+             if not pd.api.types.is_datetime64_any_dtype(GLOBAL_DF['Date']):
+                 temp_dates = pd.to_datetime(GLOBAL_DF['Date'], errors='coerce')
+             else:
+                 temp_dates = GLOBAL_DF['Date']
+                 
+             month_map = {name: i for i, name in enumerate(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 1)}
+             target_month_num = month_map.get(month)
+             
+             # Apply Filter (All Years)
+             mask = (temp_dates.dt.month == target_month_num)
+             filtered = GLOBAL_DF[mask]
+             
+             if not filtered.empty:
+                 return _generate_analytics_context(filtered, f"Found {len(filtered)} transactions in {month} (All Years).")
+
+        except Exception:
+            pass
+
+    # 4. Category/Keyword Extraction
+    # Check if any known category is in the query
+    if 'Category' in GLOBAL_DF.columns:
+        unique_cats = GLOBAL_DF['Category'].dropna().unique()
+        for cat in unique_cats:
+            # Simple keyword match
+            if cat.lower() in question.lower():
+                filtered = GLOBAL_DF[GLOBAL_DF['Category'] == cat]
+                if not filtered.empty:
+                    return _generate_analytics_context(filtered, f"Found {len(filtered)} transactions for category '{cat}'.")
+
+    # 5. Generic Total/All Time
+    # If users ask "total spent" or "all transactions" without date filters
+    if any(k in question.lower() for k in ["total spent", "how much spent", "all transactions", "overall", "all time"]):
+        return _generate_analytics_context(GLOBAL_DF, f"Found {len(GLOBAL_DF)} transactions (All Time).")
+
     return None
 
 
@@ -235,11 +335,15 @@ Context Data:
 User Question: {question}
 
 Instructions:
-1. If the context starts with "Found X transactions", this means the data retrieval was SUCCESSFUL. Use this data to answer.
-2. Present the information clearly. If a list is provided, you can summarize or present it as requested.
-3. Format monetary values as ₹XX.XX.
-4. Be direct and helpful.
-5. ONLY say "no transactions found" if the context explicitly indicates no data was retrieved.
+1. If the context contains a structured table or list of transactions, PRESERVE that structure in your response efficiently.
+2. If "Found X transactions" is in the context, use that data as the source of truth.
+3. When listing transactions, ALWAYS use a Markdown table format:
+   | Date | Description | Amount | Category |
+   |---|---|---|---|
+4. Format monetary values as ₹XX.XX.
+5. Provide a summary of the total spending if multiple items are listed.
+6. Be direct and helpful.
+7. ONLY say "no transactions found" if the context explicitly indicates no data was retrieved.
 
 Answer:"""
         
