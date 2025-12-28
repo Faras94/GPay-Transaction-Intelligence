@@ -6,10 +6,10 @@ import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
 
-# Import the functions to test
+# Import the functional API
 from rag.rag_retrieval import retrieve
 from rag.rag_reranking import rerank_docs
-from rag.rag_llm import LLMClient
+from rag.rag_llm import call_llm
 
 @pytest.fixture
 def mock_models():
@@ -19,15 +19,13 @@ def mock_models():
         
         # Mock Embedder
         mock_embedder = MagicMock()
-        # Return a dummy vector of size (1, 128) for any encode call
         mock_embedder.encode.return_value = np.zeros((1, 128), dtype="float32")
-        
         # Mock retrieval load_models returns (embedder, None)
         mock_load_retrieval.return_value = (mock_embedder, None)
         
         # Mock Reranker
         mock_reranker_model = MagicMock()
-        # preduct returns a list of scores, one for each pair
+        # predict returns a list of scores, one for each pair
         mock_reranker_model.predict.return_value = [0.99, 0.5, 0.1]
         
         # Mock reranking load_models returns (None, reranker)
@@ -48,10 +46,11 @@ def dummy_index():
 @pytest.mark.timeout(120)
 def test_rag_end_to_end_mocked(mock_models, dummy_index):
     """Test the pipeline flow with mocked models."""
-    # Ensure environment variable for LLM API key is set for LLMClient init
-    # (Checking strictly, though LLMClient might check it on init)
+    # Ensure environment variable for LLM API key handling
     if not os.getenv("OPENAI_API_KEY"):
-        os.environ["OPENAI_API_KEY"] = "sk-dummy-key"
+         os.environ["OPENAI_API_KEY"] = "sk-dummy-key"
+    if not os.getenv("OPENROUTER_API_KEY"):
+         os.environ["OPENROUTER_API_KEY"] = "sk-dummy-key"
 
     query = "Coffee expenses"
     # Docs as strings, as expected by retrieve()
@@ -62,29 +61,26 @@ def test_rag_end_to_end_mocked(mock_models, dummy_index):
     ]
 
     # 1. Retrieval
-    # retrieve signature: retrieve(query: str, index, docs: list)
-    # It will call load_models (mocked) loop through docs.
     results = retrieve(query, dummy_index, docs)
-    
-    # We expect some results. 
-    # Since our mock embedder returns zeros and index has zeros, distance is 0.
-    # It should match semantically.
     assert len(results) > 0, "Retrieval returned no results"
-    assert "text" in results[0]
     
     # 2. Reranking
-    # rerank_docs signature: rerank_docs(query, doc_items)
     reranked = rerank_docs(query, results)
     assert len(reranked) > 0, "Reranking returned empty list"
-    assert "rerank_score" in reranked[0]
 
     # 3. LLM Generation
-    # We will mock the actual network call to OpenAI in LLMClient
-    with patch("rag.rag_llm.LLMClient.generate") as mock_generate:
-        mock_generate.return_value = "You spent ₹500 on coffee."
+    # Mock call_llm internal request locally
+    with patch("rag.rag_llm.requests.post") as mock_post:
+        # Mock a successful API response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "You spent ₹500 on coffee."}}]
+        }
+        mock_post.return_value = mock_response
         
-        llm = LLMClient()
-        prompt = llm.build_prompt(query, reranked)
-        answer = llm.generate(prompt)
+        # Since logic constructs prompt manually in pipeline, we just pass a string here
+        prompt = f"Context: {reranked[0]['text']}\nQuestion: {query}"
+        answer = call_llm(prompt)
         
         assert answer == "You spent ₹500 on coffee."

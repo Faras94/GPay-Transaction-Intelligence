@@ -1,23 +1,16 @@
+import os
+import requests
+
 """
 RAG LLM Module
 
 Handles external LLM API calls.
 """
 
-import requests
-from .rag_config import OPENROUTER_API_KEY, LLM_MODEL
-
-
 def call_llm(prompt: str) -> str:
-    """
-    Call OpenRouter API with the given prompt.
-    
-    Args:
-        prompt: System + user prompt
-        
-    Returns:
-        str: LLM response text
-    """
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+    LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-3.5-turbo") # Default model if not set
+
     if not OPENROUTER_API_KEY:
         return "Error: OPENROUTER_API_KEY not configured."
     
