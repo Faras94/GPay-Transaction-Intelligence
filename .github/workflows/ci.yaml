@@ -37,7 +37,8 @@ jobs:
         env:
           CI: "true"
           TRANSFORMERS_OFFLINE: "1"
-          OPENAI_API_KEY: "sk-dummy-key"  # Explicitly dummy since we mock calls
+          OPENAI_API_KEY: "sk-dummy-key"
+          OPENROUTER_API_KEY: "sk-dummy-key"
         run: pytest -q tests/validation_rag.py
 
       - name: Import dashboard.py
