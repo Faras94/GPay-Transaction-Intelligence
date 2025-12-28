@@ -18,7 +18,7 @@ except Exception:
 
 # ================== PAGE CONFIG ==================
 st.set_page_config(
-    page_title="GPay Transaction Intelligence",
+    page_title="GPay Transaction Intelligence v1.0",
     layout="wide",
     initial_sidebar_state="expanded"
 )
