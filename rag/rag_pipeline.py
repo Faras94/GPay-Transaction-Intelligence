@@ -108,7 +108,6 @@ def query_structured_data(question: str):
     Attempt to answer using direct DataFrame filtering (Hybrid Search).
     Returns a context string if successful, else None.
     """
-    global GLOBAL_DF
     if GLOBAL_DF is None or GLOBAL_DF.empty:
         return None
         
@@ -188,7 +187,6 @@ def query_rag(question: str):
     """
     Query the RAG system.
     """
-    global PDF_READY, DOCS, INDEX
     
     if not PDF_READY or INDEX is None:
         return {

@@ -12,6 +12,7 @@ from transaction_processing import process_csv_data
 # ================== OPTIONAL RAG ==================
 try:
     from rag import initialize_rag, query_rag
+    from rag.rag_embeddings import file_hash, cache_path
     RAG_AVAILABLE = True
 except Exception:
     RAG_AVAILABLE = False
@@ -373,7 +374,7 @@ st.markdown("""
 # ================== HEADER ==================
 st.markdown("""
 <div class="main-header">
-    <h1>GPay Transaction Intelligence v1.0</h1>
+    <h1>GPay Transaction Intelligence v1.1</h1>
     <p>Enterprise-grade financial analytics and insights platform</p>
 </div>
 """, unsafe_allow_html=True)
