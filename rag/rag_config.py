@@ -20,8 +20,8 @@ EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 # ================= RETRIEVAL PARAMETERS =================
-TOP_K = 6  # Number of documents to retrieve initially
-FINAL_K = 3  # Number of documents after reranking
+TOP_K = 25  # Increased to capture more candidates
+FINAL_K = 15  # Increased to allow longer lists in answers
 
 # ================= CACHE CONFIGURATION =================
 CACHE_DIR = "embed_cache"
