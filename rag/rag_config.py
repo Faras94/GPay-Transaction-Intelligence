@@ -15,7 +15,7 @@ load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # ================= MODEL CONFIGURATION =================
-LLM_MODEL = "allenai/olmo-3.1-32b-think:free"
+LLM_MODEL = "xiaomi/mimo-v2-flash:free"
 EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
