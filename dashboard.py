@@ -237,7 +237,15 @@ def load_data(uploaded_file):
         return df_raw, None
     return pd.DataFrame(), None
 
-# ================== MAIN UI LAYOUT ==================
+# GLOBAL DATA STATE
+if "df" not in st.session_state:
+    st.session_state.df = None
+if "rag_ready" not in st.session_state:
+    st.session_state.rag_ready = False
+if "last_file_id" not in st.session_state:
+    st.session_state.last_file_id = None
+if "rag_info" not in st.session_state:
+    st.session_state.rag_info = None
 
 # 1. SIDEBAR (Data Upload)
 with st.sidebar:
@@ -248,6 +256,18 @@ with st.sidebar:
     sidebar_file = st.file_uploader("Upload Statement", type=['pdf', 'csv'], help="GPay PDF statement", key="sidebar_uploader")
     st.caption("Supported: GPay PDF Export, CSV")
     
+    # Download Button Logic
+    if st.session_state.df is not None:
+        st.write("") # Spacer
+        csv_buffer = st.session_state.df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="💾 Download Transaction DB (CSV)",
+            data=csv_buffer,
+            file_name=f"gpay_transactions_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            help="Export processed transactions (including UPI IDs) as a CSV database."
+        )
+    
     st.markdown("---")
     st.subheader("⚙️ Settings")
     st.info("Additional preferences coming soon.")
@@ -257,15 +277,6 @@ with st.sidebar:
         st.markdown("**Version:** 1.0.0")
         st.markdown("Secure, local processing of your financial data.")
 
-# GLOBAL DATA STATE
-if "df" not in st.session_state:
-    st.session_state.df = None
-if "rag_ready" not in st.session_state:
-    st.session_state.rag_ready = False
-if "last_file_id" not in st.session_state:
-    st.session_state.last_file_id = None
-if "rag_info" not in st.session_state:
-    st.session_state.rag_info = None
 
 # PROCESS UPLOAD
 # Check both sidebar and main uploader
