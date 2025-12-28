@@ -1,1 +1,11 @@
 .env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+
+# Project specific
+uploads/
+embed_cache/

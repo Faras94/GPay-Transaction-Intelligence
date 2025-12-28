@@ -1,0 +1,14 @@
+
+version: '3.8'
+
+services:
+  gpay-analytics:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./embed_cache:/app/embed_cache
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
