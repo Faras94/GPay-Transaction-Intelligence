@@ -1,11 +1,11 @@
-import pypdf
+import fitz  # PyMuPDF
 import re
 import pandas as pd
 
 def clean_pdf_text(text):
     """Normalize text and fix common PDF extraction artifacts."""
     text = re.sub(r'\s+', ' ', text)
-    # Fix joined words
+    # Fix joined words - reduced need with PyMuPDF but kept for safety
     text = text.replace("Receivedfrom", "Received from ")
     text = text.replace("Paidto", "Paid to ")
     text = text.replace("Paidby", "Paid by ")
@@ -14,11 +14,12 @@ def clean_pdf_text(text):
 def extract_gpay_transactions(pdf_path, output_csv):
     transactions = []
     
-    with open(pdf_path, 'rb') as f:
-        reader = pypdf.PdfReader(f)
-        full_text = ""
-        for page in reader.pages:
-            full_text += page.extract_text() + "\n"
+    doc = fitz.open(pdf_path)
+    full_text = ""
+    for page in doc:
+        full_text += page.get_text() + "\n"
+    
+    doc.close()
 
     # Pre-process text
     full_text = clean_pdf_text(full_text)
