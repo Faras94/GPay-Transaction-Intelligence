@@ -4,8 +4,8 @@ RAG Retrieval Module
 Implements hybrid retrieval combining semantic search with keyword matching.
 """
 
-import re
 import faiss
+import re
 from .rag_models import load_models
 from .rag_config import TOP_K
 
