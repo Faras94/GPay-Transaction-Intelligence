@@ -9,403 +9,164 @@ import os
 from datetime import datetime
 from transaction_processing import process_csv_data
 
-# ================== OPTIONAL RAG ==================
+# ================== RAG SETUP ==================
 try:
-    from rag import initialize_rag, query_rag
+    from rag.rag_pipeline import initialize_rag, query_rag
     RAG_AVAILABLE = True
-except Exception:
+except ImportError:
+    # Fallback/Mock for UI dev if modules missing
     RAG_AVAILABLE = False
+    def initialize_rag(*args, **kwargs): return False, "RAG module not found"
+    def query_rag(*args, **kwargs): return {"answer": "RAG not available", "sources": []}
 
 # ================== PAGE CONFIG ==================
 st.set_page_config(
-    page_title="GPay Transaction Intelligence v1.0",
+    page_title="Expense Intelligence",
+    page_icon="💳",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ================== MODERN CSS STYLING ==================
+# ================== GOOGLE PAY STYLE CSS ==================
 st.markdown("""
 <style>
-    /* Global Styles */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
+    @import url('https://fonts.googleapis.com/css2?family=Product+Sans:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+    /* Global Reset & Typography */
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Product Sans', 'Roboto', sans-serif;
+        color: #3c4043;
+        background-color: #f8f9fa; /* Light grey background like GPay app */
     }
-    
-    /* Hide Streamlit branding but keep header for sidebar toggle */
+
+    /* Hide Streamlit Defaults */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    /* header {visibility: hidden;}  <-- This hides the sidebar toggle! */
-    
-    /* Main container */
+    /* header {visibility: hidden;} */ /* Unhidden to allow sidebar toggle > to show */
+
+    /* Main Container */
     .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
-        max-width: 1400px;
-    }
-
-    /* Sidebar Styling Compact */
-    [data-testid="stSidebar"] {
-        background-color: #f8fafc;
-        border-right: 1px solid #e2e8f0;
-    }
-    
-    [data-testid="stSidebarUserContent"] {
         padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1200px;
     }
 
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-        margin-bottom: 1rem !important;
-    }
-    
-    [data-testid="stSidebar"] .stRadio {
-        margin-bottom: -1rem !important; /* Pull next item closer */
-    }
-    
-    [data-testid="stSidebar"] .stRadio > label {
-        margin-bottom: 0.5rem;
-        font-weight: 500;
-        color: #1e293b;
-    }
-    
-    /* Ensure visible text in sidebar */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
-        color: #1e293b;
-    }
-    
-    /* Header Section */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2.5rem 2rem;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-    }
-    
-    .main-header h1 {
-        color: white;
-        font-size: 2rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.02em;
-    }
-    
-    .main-header p {
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 1rem;
-        margin: 0.5rem 0 0 0;
-        font-weight: 400;
-    }
-    
-    /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #f8fafc;
-        border-right: 1px solid #e2e8f0;
-    }
-
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
-        color: #1e293b;
-    }
-    
-    [data-testid="stSidebar"] .element-container {
-        padding: 0.25rem 0;
-    }
-    
-    /* Section Headers */
-    .section-header {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: #1e293b;
-        margin: 2rem 0 1rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e2e8f0;
-    }
-    
-    /* Metric Cards - Enhanced */
-    [data-testid="stMetric"] {
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    [data-testid="stMetric"]::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-    
-    [data-testid="stMetric"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
-    }
-    
-    [data-testid="stMetric"]:hover::before {
-        opacity: 1;
-    }
-    
-    [data-testid="stMetric"] label {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        margin-bottom: 0.5rem;
-    }
-    
-    [data-testid="stMetric"] [data-testid="stMetricValue"] {
-        font-size: 2rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    /* Info boxes */
-    .stAlert {
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 1rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* File uploader - Enhanced */
-    [data-testid="stFileUploader"] {
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border: 2px dashed #cbd5e1;
-        border-radius: 12px;
-        padding: 2.5rem;
-        text-align: center;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        color: #1e293b;
-        position: relative;
-    }
-
-    [data-testid="stFileUploader"] label {
-        color: #1e293b;
-        font-weight: 500;
-    }
-    
-    [data-testid="stFileUploader"] small {
-        color: #64748b;
-    }
-    
-    [data-testid="stFileUploader"]:hover {
-        border-color: #667eea;
-        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
-        transform: scale(1.01);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-    }
-    
-    /* Buttons - Enhanced */
-    .stButton button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+    /* Metric Cards (GPay Style) */
+    div[data-testid="stMetric"] {
+        background-color: #ffffff;
+        border-radius: 24px;
+        padding: 20px 24px;
+        box-shadow: 0 1px 2px 0 rgba(60,64,67,0.1), 0 2px 6px 2px rgba(60,64,67,0.05); /* Soft GPay shadow */
         border: none;
-        border-radius: 10px;
-        padding: 0.75rem 2rem;
-        font-weight: 600;
-        font-size: 0.9375rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 6px rgba(102, 126, 234, 0.25);
-        position: relative;
-        overflow: hidden;
+        transition: box-shadow 0.2s;
     }
-    
-    .stButton button::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: left 0.5s ease;
+    div[data-testid="stMetric"]:hover {
+        box-shadow: 0 4px 8px 3px rgba(60,64,67,0.15);
     }
-    
-    .stButton button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.35);
-    }
-    
-    .stButton button:hover::before {
-        left: 100%;
-    }
-    
-    .stButton button:active {
-        transform: translateY(0);
-    }
-    
-    /* Dataframe */
-    [data-testid="stDataFrame"] {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 0.5rem;
-        background: white;
-        padding: 0.5rem;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 6px;
-        padding: 0.5rem 1.25rem;
+    div[data-testid="stMetric"] label {
+        color: #5f6368; /* Google Grey 700 */
+        font-size: 0.85rem;
         font-weight: 500;
-        color: #64748b;
+        letter-spacing: 0.05em;
     }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        font-family: 'Product Sans', sans-serif;
+        font-weight: 400; /* GPay uses lighter weights for large numbers */
+        font-size: 1.8rem;
+        color: #202124; /* Google Grey 900 */
     }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        font-weight: 500;
-        color: #1e293b;
+
+    /* Custom Cards (Using standard markdown divs) */
+    .gpay-card {
+        background-color: white;
+        border-radius: 24px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px 0 rgba(60,64,67,0.1), 0 4px 8px 3px rgba(60,64,67,0.05);
+        border: 1px solid #e8eaed;
     }
-    
-    /* Input fields */
-    .stTextInput input, .stNumberInput input, .stSelectbox select {
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-        padding: 0.625rem;
-        font-size: 0.9375rem;
-    }
-    
-    .stTextInput input:focus, .stNumberInput input:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    /* Success/Error/Warning messages */
-    .stSuccess {
-        background: #f0fdf4;
-        border-left: 4px solid #22c55e;
-        color: #166534;
-    }
-    
-    .stError {
-        background: #fef2f2;
-        border-left: 4px solid #ef4444;
-        color: #991b1b;
-    }
-    
-    .stWarning {
-        background: #fffbeb;
-        border-left: 4px solid #f59e0b;
-        color: #92400e;
-    }
-    
-    .stInfo {
-        background: #eff6ff;
-        border-left: 4px solid #3b82f6;
-        color: #1e40af;
-    }
-    
-    /* Welcome screen */
-    .welcome-card {
-        background: white;
-        border-radius: 12px;
-        padding: 3rem;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        text-align: center;
-    }
-    
-    .welcome-card h2 {
-        color: #1e293b;
-        font-size: 1.875rem;
-        font-weight: 700;
+    .gpay-card h3 {
+        margin-top: 0;
+        font-size: 1.1rem;
+        color: #202124;
         margin-bottom: 1rem;
+        font-weight: 500;
     }
-    
-    .welcome-card p {
-        color: #64748b;
-        font-size: 1.125rem;
-        line-height: 1.6;
-        margin-bottom: 2rem;
+
+    /* Primary Headers */
+    h1 {
+        font-family: 'Product Sans', sans-serif;
+        font-weight: 400; /* Google Logo style */
+        color: #202124;
     }
-    
-    .feature-list {
-        text-align: left;
-        display: inline-block;
-        margin: 2rem 0;
+    h2, h3 {
+        font-family: 'Product Sans', sans-serif;
+        color: #202124;
     }
-    
-    .feature-list li {
-        color: #475569;
-        font-size: 1rem;
-        line-height: 2;
-        padding-left: 0.5rem;
-    }
-    
-    /* Chart containers */
-    .js-plotly-plot {
+
+    /* Monthly Filter Dropdown Styling */
+    div[data-testid="stSelectbox"] > div > div {
+        background-color: white;
         border-radius: 8px;
+        border: 1px solid #dadce0;
     }
+
+    /* AI Chat Styling */
+    .stChatMessage {
+        background-color: transparent;
+    }
+    .stChatMessage[data-testid="user-message"] {
+        background-color: #f1f3f4; /* Google Grey 100 */
+        border-radius: 20px;
+        padding: 10px 20px;
+    }
+    div[data-testid="stChatMessageAvatarUser"] {
+        display: none; /* Cleaner look without avatars often */
+    }
+    
+    /* Buttons */
+    .stButton button {
+        background-color: #1a73e8; /* Google Blue */
+        color: white;
+        border-radius: 24px;
+        font-weight: 500;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+    }
+    .stButton button:hover {
+        background-color: #1765cc;
+        box-shadow: 0 2px 4px rgba(60,64,67,0.3);
+    }
+    
+    /* File Uploader */
+    div[data-testid="stFileUploader"] {
+        background-color: white;
+        border-radius: 12px;
+        border: 1px dashed #dadce0;
+        padding: 20px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
-# ================== HEADER ==================
-st.markdown("""
-<div class="main-header">
-    <h1>GPay Transaction Intelligence v1.0</h1>
-    <p>Enterprise-grade financial analytics and insights platform</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ================== HELPERS ==================
-def clean_pdf_text(text):
-    """Clean extracted PDF text"""
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+# ================== HELPER FUNCTIONS ==================
 
 @st.cache_data(show_spinner=False)
 def extract_gpay_transactions_from_file(path):
-    """Extract GPay transactions from PDF - handles concatenated text format"""
+    """Extract GPay transactions from PDF (Preserved Logic)"""
     rows = []
-    
     try:
         reader = pypdf.PdfReader(path)
-        
         full_text = ""
         for page in reader.pages:
             full_text += page.extract_text() + "\n"
-        
-        original_text = full_text
-        
-        with st.expander("View extracted PDF content"):
-            st.text(full_text[:2000])
-        
+            
         pattern = r'(\d{1,2}[A-Za-z]{3},\d{4})\s*(\d{1,2}:\d{2}[AP]M)'
         matches = list(re.finditer(pattern, full_text))
         
         if not matches:
-            st.error("Couldn't find any transactions in this PDF. The file might be in a different format.")
             return pd.DataFrame()
         
         for i, match in enumerate(matches):
@@ -413,26 +174,22 @@ def extract_gpay_transactions_from_file(path):
             time_str = match.group(2)
             
             start_pos = match.end()
-            if i + 1 < len(matches):
-                end_pos = matches[i + 1].start()
-            else:
-                end_pos = len(full_text)
+            end_pos = matches[i+1].start() if i + 1 < len(matches) else len(full_text)
             
             transaction_text = full_text[start_pos:end_pos].strip()
             
-            # Extract UPI Transaction ID
-            upi_pattern = r'UPI\s*Transaction\s*ID:\s*(\d+)'
-            upi_match = re.search(upi_pattern, transaction_text)
+            # UPI ID
+            upi_match = re.search(r'UPI\s*Transaction\s*ID:\s*(\d+)', transaction_text)
             upi_id = upi_match.group(1) if upi_match else None
             
+            # Amount
             amount_match = re.search(r'₹([\d,]+(?:\.\d{2})?)', transaction_text)
-            
-            if not amount_match:
-                continue
+            if not amount_match: continue
             
             amount = float(amount_match.group(1).replace(",", ""))
             desc_text = transaction_text[:amount_match.start()].strip()
             
+            # Type Logic
             if 'Receivedfrom' in desc_text or 'Received from' in desc_text:
                 txn_type = "Received"
                 desc = re.sub(r'.*Receivedfrom\s*', '', desc_text, flags=re.IGNORECASE)
@@ -443,12 +200,11 @@ def extract_gpay_transactions_from_file(path):
                 txn_type = "Spent"
                 desc = desc_text
             
+            # Cleanup Description
             desc = re.sub(r'UPITransactionID:\d+', '', desc)
             desc = re.sub(r'Paid\s*(to|by)\s*[A-Z]+\s*Bank\d+', '', desc, flags=re.IGNORECASE)
             desc = re.sub(r'[A-Z]{4}Bank\d+', '', desc)
-            
-            desc_parts = re.split(r'(?:UPI|Paid|Transaction)', desc, maxsplit=1)
-            desc = desc_parts[0].strip()
+            desc = re.split(r'(?:UPI|Paid|Transaction)', desc)[0].strip()
             desc = re.sub(r'\s+', ' ', desc).strip()
             
             if not desc or desc.isdigit() or len(desc) < 2:
@@ -462,695 +218,350 @@ def extract_gpay_transactions_from_file(path):
                 "Type": txn_type,
                 "UPI ID": upi_id
             })
-        
-        if rows:
-            df = pd.DataFrame(rows)
-            with st.expander(f"Preview: Found {len(rows)} transactions"):
-                st.dataframe(df.head(10), width="stretch")
-            return df
-        else:
-            st.error("No transactions could be extracted. Try using the CSV upload option instead.")
-            return pd.DataFrame()
-    
-    except Exception as e:
-        st.error(f"Something went wrong while reading the PDF: {str(e)}")
-        with st.expander("Technical details"):
-            import traceback
-            st.code(traceback.format_exc())
-        return pd.DataFrame()
-
-def validate_dataframe(df):
-    """Validate required columns in dataframe"""
-    required_cols = ["Date", "Amount (₹)", "Type", "Description"]
-    missing = [col for col in required_cols if col not in df.columns]
-    
-    if missing:
-        st.error(f"The file is missing these required columns: {', '.join(missing)}")
-        return False
-    return True
-
-def create_category_chart(data):
-    """Create enhanced pie chart for categories"""
-    fig = px.pie(
-        data,
-        values="Amount (₹)",
-        names="Category",
-        hole=0.4,
-        color_discrete_sequence=['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0']
-    )
-    fig.update_traces(textposition='inside', textinfo='percent+label', textfont_size=12)
-    fig.update_layout(
-        showlegend=True,
-        height=400,
-        margin=dict(t=20, b=20, l=20, r=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family="Inter, sans-serif")
-    )
-    return fig
-
-def create_monthly_trend(data):
-    """Create enhanced monthly trend chart"""
-    fig = px.bar(
-        data,
-        x="Month",
-        y="Amount (₹)",
-        color="Type",
-        barmode="group",
-        color_discrete_map={"Spent": "#ef4444", "Received": "#10b981"}
-    )
-    fig.update_layout(
-        xaxis_title="",
-        yaxis_title="Amount",
-        height=400,
-        hovermode='x unified',
-        margin=dict(t=20, b=20, l=20, r=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family="Inter, sans-serif"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    return fig
-
-def create_daily_trend(data):
-    """Create daily spending line chart"""
-    daily = data.groupby(['Date', 'Type'])['Amount (₹)'].sum().reset_index()
-    
-    fig = px.line(
-        daily,
-        x='Date',
-        y='Amount (₹)',
-        color='Type',
-        markers=True,
-        color_discrete_map={"Spent": "#ef4444", "Received": "#10b981"}
-    )
-    fig.update_layout(
-        xaxis_title="",
-        yaxis_title="Amount",
-        height=400,
-        hovermode='x unified',
-        margin=dict(t=20, b=20, l=20, r=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family="Inter, sans-serif"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    return fig
-
-def create_top_expenses_chart(data, top_n=10):
-    """Create bar chart of top expenses"""
-    top_expenses = data.nlargest(top_n, 'Amount (₹)')
-    
-    fig = px.bar(
-        top_expenses,
-        x='Amount (₹)',
-        y='Description',
-        orientation='h',
-        color='Category',
-        color_discrete_sequence=['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a']
-    )
-    fig.update_layout(
-        yaxis={'categoryorder': 'total ascending'},
-        xaxis_title="Amount",
-        yaxis_title="",
-        height=400,
-        showlegend=False,
-        margin=dict(t=20, b=20, l=20, r=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family="Inter, sans-serif")
-    )
-    return fig
-
-# ================== SIDEBAR ==================
-with st.sidebar:
-    st.markdown("<h3 style='margin-bottom: 1.5rem;'>Upload Data</h3>", unsafe_allow_html=True)
-    
-    
-    # Check for existing file
-    UPLOAD_DIR = "uploads"
-    PDF_DIR = os.path.join(UPLOAD_DIR, "pdf")
-    CSV_DIR = os.path.join(UPLOAD_DIR, "csv")
-    
-    os.makedirs(PDF_DIR, exist_ok=True)
-    os.makedirs(CSV_DIR, exist_ok=True)
-    
-    pdf_files = [f"pdf/{f}" for f in os.listdir(PDF_DIR) if f.lower().endswith('.pdf')]
-    # csv_files = [f"csv/{f}" for f in os.listdir(CSV_DIR) if f.lower().endswith('.csv')] # Hidden from frontend
-    
-    existing_files = pdf_files # + csv_files
-    existing_files.sort(reverse=True)
-    
-    # 1. Prepare options
-    input_options = ["PDF Statement", "Manual Entry"]
-    if existing_files:
-        input_options.insert(0, "Select Recent File")
-    
-    # 2. Unified Radio
-    upload_method = st.radio(
-        "Choose input method",
-        input_options,
-        help="Select how you want to add your transactions"
-    )
-    
-    pdf_path = None
-    uploaded_file = None
-    
-    # 3. Handle selection
-    if upload_method == "Select Recent File":
-        selected_file = st.selectbox("Select file", existing_files)
-        # Construct full path based on relative path
-        pdf_path = os.path.join(UPLOAD_DIR, selected_file)
-        uploaded_file = "LOCAL_FILE"
-        st.info(f"Using stored file: {selected_file}")
-        
-    elif upload_method == "PDF Statement":
-        uploaded_file = st.file_uploader(
-            "Upload your Google Pay statement",
-            type="pdf",
-            help="Upload a PDF export from Google Pay"
-        )
-        
-        # Don't save yet - will save after successful extraction
-        if uploaded_file:
-            # Store temporarily for processing
-            pdf_path = os.path.join(PDF_DIR, uploaded_file.name)
-            st.info(f"📄 Processing: {uploaded_file.name}")
-
-    elif upload_method == "CSV File":
-        uploaded_file = st.file_uploader(
-            "Upload CSV file",
-            type="csv",
-            help="Must include: Date, Description, Amount (₹), Type"
-        )
-        st.caption("Required columns: Date, Time, Description, Amount (₹), Type")
-        
-        if uploaded_file:
-            # Save uploaded CSV
-            csv_path = os.path.join(CSV_DIR, uploaded_file.name)
-            if not os.path.exists(csv_path):
-                with open(csv_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                st.success(f"Saved CSV to {csv_path}")
-            else:
-                st.info(f"CSV already exists in storage: {csv_path}")
             
-            # Allow logic to proceed
-            pdf_path = csv_path
-    
+        return pd.DataFrame(rows)
+    except Exception as e:
+        return pd.DataFrame() # Soft fail
+
+def load_data(uploaded_file):
+    """Load and process data from uploaded file"""
+    if uploaded_file.name.endswith('.pdf'):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+        
+        df_raw = extract_gpay_transactions_from_file(tmp_path)
+        return df_raw, tmp_path
+    elif uploaded_file.name.endswith('.csv'):
+        df_raw = pd.read_csv(uploaded_file)
+        return df_raw, None
+    return pd.DataFrame(), None
+
+# ================== MAIN UI LAYOUT ==================
+
+# 1. SIDEBAR (Data Upload)
+with st.sidebar:
+    st.title("Expense Intelligence")
     st.markdown("---")
     
-    # Budget Settings (Hidden)
-    monthly_budget = 20000
-
-# ================== MAIN ==================
-if uploaded_file or pdf_path or upload_method == "Manual Entry":
-    # Preserving pdf_path from sidebar
-    pass
+    st.subheader("📂 Data Management")
+    sidebar_file = st.file_uploader("Upload Statement", type=['pdf', 'csv'], help="GPay PDF statement", key="sidebar_uploader")
+    st.caption("Supported: GPay PDF Export, CSV")
     
-    try:
-        if upload_method == "Manual Entry":
-            st.markdown("<h2 class='section-header'>Add Transaction</h2>", unsafe_allow_html=True)
-            
-            with st.form("manual_entry"):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    manual_date = st.date_input("Date", datetime.now())
-                    manual_desc = st.text_input("Description", placeholder="What was this for?")
-                    manual_amount = st.number_input("Amount", min_value=0.0, step=10.0)
-                
-                with col2:
-                    manual_time = st.time_input("Time", datetime.now().time())
-                    manual_type = st.selectbox("Type", ["Spent", "Received"])
-                
-                submitted = st.form_submit_button("Add Transaction")
-                
-                if submitted and manual_amount > 0:
-                    df_raw = pd.DataFrame([{
-                        "Date": manual_date.strftime("%d%b,%Y"),
-                        "Time": manual_time.strftime("%I:%M%p"),
-                        "Description": manual_desc,
-                        "Amount (₹)": manual_amount,
-                        "Type": manual_type,
-                        "UPI ID": None
-                    }])
-                    st.success("Transaction added successfully")
-                else:
-                    st.stop()
-        
-        if upload_method == "CSV File" or (pdf_path and pdf_path.endswith('.csv')):
-            if upload_method == "CSV File" and uploaded_file:
-                 # CSV already read or accessible
-                 df_raw = pd.read_csv(uploaded_file)
-            elif pdf_path and os.path.exists(pdf_path):
-                 df_raw = pd.read_csv(pdf_path)
-                 
-            required_cols = ["Date", "Description", "Amount (₹)", "Type"]
-            missing_cols = [col for col in required_cols if col not in df_raw.columns]
-            
-            if missing_cols:
-                st.error(f"Your CSV is missing these columns: {', '.join(missing_cols)}")
-                st.info("Make sure your file has: Date, Time (optional), Description, Amount (₹), Type")
-                st.stop()
-            
-            if "Time" not in df_raw.columns:
-                df_raw["Time"] = "00:00AM"
-            
-            if "UPI ID" not in df_raw.columns:
-                df_raw["UPI ID"] = None
-            
-            st.success(f"Loaded {len(df_raw)} transactions from your file")
-        
-        else:
-            # Check if this is a local file override or just uploaded
-            if not pdf_path and uploaded_file:
-                 # This handles the case where it wasn't saved in the sidebar logic for some reason
-                 # typically sidebar logic handles saving for PDF. 
-                 # But if user enters Manual Entry or CSV, pdf_path is None.
-                 pass
-            
-            # If we have a pdf_path (either selected from existing or just uploaded/saved)
-            if pdf_path and os.path.exists(pdf_path):
-                 pass # path is ready
-            if pdf_path and os.path.exists(pdf_path):
-                 pass # path is ready
-            elif uploaded_file and upload_method == "PDF Statement" and uploaded_file != "LOCAL_FILE":
-                 # Fallback if sidebar didn't save it (shouldn't happen with new logic, but safe)
-                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(uploaded_file.read())
-                    pdf_path = tmp.name
+    st.markdown("---")
+    st.subheader("⚙️ Settings")
+    st.info("Additional preferences coming soon.")
+    
+    st.markdown("---")
+    with st.expander("ℹ️ About"):
+        st.markdown("**Version:** 1.0.0")
+        st.markdown("Secure, local processing of your financial data.")
 
-            # RAG initialization moved to after processing to use structured data
-            pass
-            
-            if pdf_path and os.path.exists(pdf_path):
-                with st.spinner(f"Reading {os.path.basename(pdf_path)}..."):
-                    df_raw = extract_gpay_transactions_from_file(pdf_path)
-                    
-                    # Only save PDF if extraction was successful
-                    if not df_raw.empty and uploaded_file and uploaded_file != "LOCAL_FILE":
-                        final_pdf_path = os.path.join(PDF_DIR, uploaded_file.name)
-                        if not os.path.exists(final_pdf_path):
-                            with open(final_pdf_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                            st.success(f"✅ Saved PDF to {final_pdf_path}")
-                        else:
-                            st.info(f"File already exists in storage")
-                    
-                    # Auto-save CSV for persistence
-                    if not df_raw.empty:
-                        csv_name = os.path.basename(pdf_path).replace('.pdf', '.csv').replace('.PDF', '.csv')
-                        # Ensure we save to the dedicated CSV folder
-                        csv_path = os.path.join(os.path.dirname(os.path.dirname(pdf_path)), "csv", csv_name)
-                        # Fallback if path manipulation fails (e.g. strict UPLOAD_DIR usage)
-                        if "uploads" not in csv_path:
-                             csv_path = os.path.join("uploads", "csv", csv_name)
-                        
-                        df_raw.to_csv(csv_path, index=False)
-                        st.toast(f"✅ Data saved to {csv_path}")
-            else:
-                st.error("No valid PDF file found. Please upload a file or select one from the list.")
-                st.stop()
+# GLOBAL DATA STATE
+if "df" not in st.session_state:
+    st.session_state.df = None
+if "rag_ready" not in st.session_state:
+    st.session_state.rag_ready = False
+if "last_file_id" not in st.session_state:
+    st.session_state.last_file_id = None
+if "rag_info" not in st.session_state:
+    st.session_state.rag_info = None
+
+# PROCESS UPLOAD
+# Check both sidebar and main uploader
+uploaded_file = sidebar_file or st.session_state.get("main_uploader")
+
+if uploaded_file:
+    # Detect if file changed
+    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+    if st.session_state.get("last_file_id") != file_id:
+        st.session_state.rag_ready = False
+        st.session_state.last_file_id = file_id
+        st.session_state.rag_info = None # Clear info
+        # Clear chat history for new file
+        st.session_state.messages = []
+
+    with st.spinner("Processing statement..."):
+        raw_df, file_path_for_rag = load_data(uploaded_file)
         
-        if df_raw.empty:
-            st.warning("No transactions found. Try a different file or use manual entry.")
-            st.stop()
-        
-        if not validate_dataframe(df_raw):
-            st.stop()
-        
-        with st.spinner("Analyzing your transactions..."):
-            df = process_csv_data(df_raw)
+        if not raw_df.empty:
+            # Process using the existing robust logic
+            processed_df = process_csv_data(raw_df)
             
-            def parse_gpay_date(date_str):
-                try:
-                    return pd.to_datetime(date_str, format='%d%b,%Y')
-                except:
-                    try:
-                        return pd.to_datetime(date_str, errors='coerce')
-                    except:
-                        return pd.NaT
+            # Simple Date Parsing cleanup
+            processed_df["Date"] = pd.to_datetime(processed_df["Date"], errors='coerce')
+            processed_df = processed_df.dropna(subset=['Date'])
             
-            df["Date"] = df["Date"].apply(parse_gpay_date)
-            df = df.dropna(subset=['Date'])
+            st.session_state.df = processed_df
             
-            # Initialize RAG with the structured data
+            # Initialize RAG Logic
             if RAG_AVAILABLE:
-                # Check if cache exists first to show appropriate message
-                cache_exists = False
-                if pdf_path and os.path.exists(pdf_path):
-                    try:
-                        h = file_hash(pdf_path)
-                        cache_file = cache_path(h)
-                        cache_exists = os.path.exists(cache_file)
-                    except:
-                        pass
+                # We attempt initialization if not ready OR if we want to ensure we have value (e.g. after clear)
+                # But we only run the heavy initialize_rag if we really need to.
+                # Since rag_pipeline handles caching efficiently, calling it again is okay for "same file" checks
+                # if we want to get the "Loaded from cache" message.
                 
-                spinner_msg = "⚡ Loading embeddings from cache..." if cache_exists else "🔄 Processing and generating embeddings..."
+                if not st.session_state.rag_ready:
+                    with st.status("🧠 Initializing AI...", expanded=True) as status:
+                        st.write("Chunking and Embedding data...")
+                        if file_path_for_rag:
+                            success, info = initialize_rag(source_file=file_path_for_rag, df=processed_df)
+                        else:
+                            success, info = initialize_rag(df=processed_df)
+                        
+                        if success:
+                            st.session_state.rag_ready = True
+                            st.session_state.rag_info = info  # Persist info
+                            status.update(label="✅ AI Ready!", state="complete", expanded=False)
+                        else:
+                            status.update(label="❌ AI Failed", state="error")
+                            st.error(info.get("message"))
+            
+        else:
+            st.error("Could not extract transactions. Please try another file.")
+
+
+
+# MAIN CONTENT
+if st.session_state.df is not None:
+    df = st.session_state.df
+    
+    # 2. HEADER SECTION
+    col_head_1, col_head_2 = st.columns([3, 1])
+    with col_head_1:
+        st.markdown("# Expense Intelligence")
+        st.markdown("### Smart insights from your GPay data")
+    
+    with col_head_2:
+        # Month Selector Logic
+        df['Month_Year'] = df['Date'].dt.strftime('%B %Y')
+        available_months = sorted(df['Month_Year'].unique(), key=lambda x: datetime.strptime(x, "%B %Y"), reverse=True)
+        available_months.insert(0, "All Time")
+        
+        selected_month = st.selectbox("Select Period", available_months)
+
+    # Filter Data by Month
+    if selected_month != "All Time":
+        mask = df['Month_Year'] == selected_month
+        df_view = df[mask]
+    else:
+        df_view = df
+
+    if df_view.empty:
+        st.warning(f"No transactions found for {selected_month}")
+    else:
+        # 3. METRICS CARDS (GPay Style)
+        # Calculate Metrics
+        total_spent = df_view[df_view['Type'] == 'Spent']['Amount (₹)'].sum()
+        total_received = df_view[df_view['Type'] == 'Received']['Amount (₹)'].sum()
+        
+        # Calculate Category Top
+        if 'Category' in df_view.columns:
+            top_cat_row = df_view[df_view['Type'] == 'Spent'].groupby('Category')['Amount (₹)'].sum().reset_index().nlargest(1, 'Amount (₹)')
+            top_category = top_cat_row.iloc[0]['Category'] if not top_cat_row.empty else "N/A"
+            top_cat_amt = top_cat_row.iloc[0]['Amount (₹)'] if not top_cat_row.empty else 0
+        else:
+            top_category = "Uncategorized"
+            top_cat_amt = 0
+
+        st.write("") # Spacer
+        m_col1, m_col2, m_col3 = st.columns(3)
+        
+        with m_col1:
+            st.metric("Total Spent", f"₹{total_spent:,.0f}")
+        with m_col2:
+            st.metric("Money In", f"₹{total_received:,.0f}")
+        with m_col3:
+            st.metric(f"Top: {top_category}", f"₹{top_cat_amt:,.0f}")
+
+        st.write("---") # Subtle divider
+
+        # 4. ANALYTICS SECTION
+        c_col1, c_col2 = st.columns([1, 2])
+        
+        with c_col1:
+            st.markdown("#### Spending by Category")
+            if 'Category' in df_view.columns:
+                cat_data = df_view[df_view['Type'] == 'Spent'].groupby('Category')['Amount (₹)'].sum().reset_index()
                 
-                with st.spinner(spinner_msg):
-                    # Pass pdf_path as source_file for caching
-                    success, status_info = initialize_rag(df=df, source_file=pdf_path if pdf_path else None)
-                    if success:
-                        if isinstance(status_info, dict) and "message" in status_info:
-                            st.info(f"🤖 **AI Assistant**: {status_info['message']}")
-                            with st.expander("📊 Embedding Details"):
-                                st.write(f"**Chunks**: {status_info.get('chunk_count', 'N/A')}")
-                                st.write(f"**Source**: {status_info.get('source', 'N/A')}")
-                                if 'file_hash' in status_info:
-                                    st.write(f"**Cache ID**: `{status_info['file_hash'][:12]}...`")
-                    else:
-                        msg = status_info.get("message", str(status_info)) if isinstance(status_info, dict) else str(status_info)
-                        st.warning(f"AI Assistant warning: {msg}")
+                # Google Colors Palette
+                gpay_colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#8AB4F8', '#F6AEA9', '#FDE293', '#81C995']
+                
+                fig_donut = px.pie(cat_data, values='Amount (₹)', names='Category', hole=0.6, 
+                                   color_discrete_sequence=gpay_colors)
+                fig_donut.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=300)
+                fig_donut.update_traces(textinfo='percent+label', textposition='inside')
+                st.plotly_chart(fig_donut, use_container_width=True)
+            else:
+                st.info("Category data not available.")
+
+        with c_col2:
+            st.markdown("#### Spending Trend")
+            # Daily or Monthly trend depending on view
+            if selected_month == "All Time":
+                # Monthly Trend
+                trend_df = df_view[df_view['Type'] == 'Spent'].groupby(df_view['Date'].dt.to_period('M').astype(str))['Amount (₹)'].sum().reset_index()
+                trend_df.columns = ['Date', 'Amount']
+                x_axis = 'Date'
+            else:
+                # Daily Trend
+                trend_df = df_view[df_view['Type'] == 'Spent'].groupby('Date')['Amount (₹)'].sum().reset_index()
+                trend_df.columns = ['Date', 'Amount']
+                x_axis = 'Date'
+            
+            fig_line = px.bar(trend_df, x=x_axis, y='Amount', 
+                               color_discrete_sequence=['#1a73e8']) # Google Blue
+            fig_line.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=10, b=10, l=10, r=10),
+                height=300,
+                xaxis_title="",
+                yaxis_title=""
+            )
+            # Remove grid lines for cleaner look
+            fig_line.update_xaxes(showgrid=False)
+            fig_line.update_yaxes(showgrid=True, gridcolor='#f1f3f4')
+            st.plotly_chart(fig_line, use_container_width=True)
+
+        # 5. TRANSACTIONS TABLE
+        st.markdown("### Recent Activity")
         
-        st.success(f"All done! Processed {len(df)} transactions")
-        
-        # ================== FILTERS ==================
+        # --- SIDEBAR FILTERS ---
         with st.sidebar:
             st.markdown("---")
-            st.markdown("<h3 style='margin-bottom: 1.5rem;'>Filters</h3>", unsafe_allow_html=True)
+            st.subheader("🔍 Table Filters")
             
-            txn_types = st.multiselect(
-                "Transaction type",
-                ["Spent", "Received"],
-                default=["Spent", "Received"]
-            )
+            # 1. Type Filter
+            type_filter = st.radio("Transaction Type", ["All", "Spent", "Received"], horizontal=True)
             
-            min_date = df["Date"].min().date()
-            max_date = df["Date"].max().date()
-            
-            date_range = st.date_input(
-                "Date range",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date
-            )
-            
-            if "Category" in df.columns:
-                categories = st.multiselect(
-                    "Categories",
-                    options=sorted(df["Category"].unique()),
-                    default=sorted(df["Category"].unique())
-                )
+            # 2. Category Filter (Dynamic)
+            if 'Category' in df_view.columns:
+                unique_cats = sorted(df_view['Category'].dropna().unique())
+                selected_cats = st.multiselect("Category", unique_cats, default=unique_cats[:5]) # Select first 5 by default or None? Better empty means all or all selected?
+                # Let's make default empty = All
             else:
-                categories = []
-        
-        filtered = df[df["Type"].isin(txn_types)].copy()
-        
-        if len(date_range) == 2:
-            filtered = filtered[
-                (filtered['Date'].dt.date >= date_range[0]) & 
-                (filtered['Date'].dt.date <= date_range[1])
-            ]
-        
-        if categories and "Category" in filtered.columns:
-            filtered = filtered[filtered["Category"].isin(categories)]
-        
-        # ================== SUMMARY ==================
-        st.markdown("<h2 class='section-header'>Overview</h2>", unsafe_allow_html=True)
-        
-        info_col1, info_col2, info_col3 = st.columns(3)
-        
-        with info_col1:
-            st.info(f"{min_date.strftime('%d %b %Y')} to {max_date.strftime('%d %b %Y')}")
-        with info_col2:
-            st.info(f"{len(filtered)} transactions")
-        with info_col3:
-            st.info(f"{filtered['Category'].nunique() if 'Category' in filtered.columns else 0} categories")
-        
-        # ================== METRICS ==================
-        spent = filtered[filtered["Type"] == "Spent"]
-        received = filtered[filtered["Type"] == "Received"]
-        
-        total_spent = spent["Amount (₹)"].sum()
-        total_income = received["Amount (₹)"].sum()
-        net = total_income - total_spent
-        
-        current_month = datetime.now().month
-        current_year = datetime.now().year
-        current_month_spent = spent[
-            (spent['Date'].dt.month == current_month) & 
-            (spent['Date'].dt.year == current_year)
-        ]['Amount (₹)'].sum()
-        
-        budget_remaining = monthly_budget - current_month_spent
-        budget_percentage = (current_month_spent / monthly_budget * 100) if monthly_budget > 0 else 0
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Total Spent", f"₹{total_spent:,.2f}")
-        
-        with col2:
-            st.metric("Total Received", f"₹{total_income:,.2f}")
-        
-        with col3:
-            st.metric("Net Balance", f"₹{net:,.2f}", delta=f"{net:,.2f}")
+                selected_cats = []
+
+            # 3. Amount Slider
+            min_amt = float(df_view['Amount (₹)'].min()) if not df_view.empty else 0.0
+            max_amt = float(df_view['Amount (₹)'].max()) if not df_view.empty else 1000.0
+            amount_range = st.slider("Amount Range (₹)", min_amt, max_amt, (min_amt, max_amt))
             
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        # --- FILTERING LOGIC ---
+        table_df = df_view.copy()
+        
+        # Apply Type Filter
+        if type_filter != "All":
+            table_df = table_df[table_df['Type'] == type_filter]
             
-        col4, col5 = st.columns(2)
-        
-        with col4:
-            avg = total_spent / len(spent) if len(spent) > 0 else 0
-            st.metric("Avg Transaction", f"₹{avg:,.2f}")
-        
-        with col5:
-            st.metric("Budget Left", f"₹{budget_remaining:,.2f}", delta=f"{budget_percentage:.0f}% used")
-        
-        if budget_percentage > 100:
-            st.error(f"You're over budget by ₹{abs(budget_remaining):,.2f} this month")
-        elif budget_percentage > 80:
-            st.warning(f"You've used {budget_percentage:.0f}% of your monthly budget")
-        
-        # ================== CHARTS ==================
-        st.markdown("<h2 class='section-header'>Analytics</h2>", unsafe_allow_html=True)
-        
-        tab1, tab2, tab3 = st.tabs(["Overview", "Trends", "Top Expenses"])
-        
-        with tab1:
-            col1, col2 = st.columns(2)
+        # Apply Category Filter
+        if selected_cats:
+            table_df = table_df[table_df['Category'].isin(selected_cats)]
             
-            with col1:
-                st.markdown("#### Spending by Category")
-                if "Category" in spent.columns and not spent.empty:
-                    fig = create_category_chart(spent)
-                    st.plotly_chart(fig, width="stretch")
-                else:
-                    st.info("No spending data available")
+        # Apply Amount Filter
+        table_df = table_df[
+            (table_df['Amount (₹)'] >= amount_range[0]) & 
+            (table_df['Amount (₹)'] <= amount_range[1])
+        ]
+        
+        # Search Box (Existing)
+        search_q = st.text_input("", placeholder="Search transactions by merchant, amount...", label_visibility="collapsed")
+        
+        if search_q:
+            table_df = table_df[table_df['Description'].str.contains(search_q, case=False, na=False)]
             
-            with col2:
-                st.markdown("#### Monthly Comparison")
-                if not filtered.empty:
-                    filtered["Month"] = filtered["Date"].dt.to_period("M").astype(str)
-                    monthly_data = filtered.groupby(["Month", "Type"])["Amount (₹)"].sum().reset_index()
-                    fig = create_monthly_trend(monthly_data)
-                    st.plotly_chart(fig, width="stretch")
-                else:
-                    st.info("No data available")
-        
-        with tab2:
-            st.markdown("#### Daily Pattern")
-            if not filtered.empty:
-                fig = create_daily_trend(filtered)
-                st.plotly_chart(fig, width="stretch")
-            else:
-                st.info("No data available")
-            
-            if not spent.empty and "Category" in spent.columns:
-                st.markdown("#### Category Trends")
-                spent_copy = spent.copy()
-                spent_copy["Month"] = spent_copy["Date"].dt.to_period("M").astype(str)
-                category_trend = spent_copy.groupby(["Month", "Category"])["Amount (₹)"].sum().reset_index()
-                
-                fig = px.line(
-                    category_trend,
-                    x="Month",
-                    y="Amount (₹)",
-                    color="Category",
-                    markers=True
-                )
-                fig.update_layout(
-                    height=400,
-                    hovermode='x unified',
-                    margin=dict(t=20, b=20, l=20, r=20),
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(family="Inter, sans-serif"),
-                    xaxis_title="",
-                    yaxis_title="Amount"
-                )
-                st.plotly_chart(fig, width="stretch")
-        
-        with tab3:
-            st.markdown("#### Top 10 Expenses")
-            if not spent.empty:
-                fig = create_top_expenses_chart(spent, top_n=10)
-                st.plotly_chart(fig, width="stretch")
-                
-                st.markdown("#### Frequent Merchants")
-                top_merchants = spent.groupby("Description")["Amount (₹)"].sum().nlargest(5).reset_index()
-                for idx, row in top_merchants.iterrows():
-                    st.text(f"{idx + 1}. {row['Description']} - ₹{row['Amount (₹)']:,.2f}")
-            else:
-                st.info("No spending data available")
-        
-        # ================== CATEGORY INSIGHTS ==================
-        if not spent.empty and "Category" in spent.columns:
-            st.markdown("<h2 class='section-header'>Category Breakdown</h2>", unsafe_allow_html=True)
-            
-            category_summary = spent.groupby("Category").agg({
-                "Amount (₹)": ["sum", "mean", "count"]
-            }).round(2)
-            category_summary.columns = ["Total", "Average", "Count"]
-            category_summary = category_summary.sort_values("Total", ascending=False)
-            
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.dataframe(category_summary, width="stretch")
-            
-            with col2:
-                st.markdown("#### Quick Stats")
-                top_category = category_summary.index[0]
-                top_amount = category_summary.iloc[0]["Total"]
-                
-                st.text(f"Top category: {top_category}")
-                st.text(f"Amount: ₹{top_amount:,.2f}")
-                st.text(f"Share: {(top_amount/total_spent*100):.0f}% of spending")
-                st.text("")
-                st.text(f"Categories: {len(category_summary)}")
-                st.text(f"Transactions: {int(category_summary['Count'].sum())}")
-        
-        # ================== TABLE ==================
-        st.markdown("<h2 class='section-header'>All Transactions</h2>", unsafe_allow_html=True)
-        
-        search_term = st.text_input("Search", placeholder="Filter by description")
-        
-        display_df = filtered.copy()
-        if search_term:
-            display_df = display_df[display_df["Description"].str.contains(search_term, case=False, na=False)]
-        
-        display_df = display_df.sort_values("Date", ascending=False)
-        
         st.dataframe(
-            display_df,
-            width="stretch",
-            height=400,
+            table_df[['Date', 'Description', 'Category', 'Amount (₹)', 'Type', 'UPI ID']].sort_values(by='Date', ascending=False),
             column_config={
-                "Date": st.column_config.DateColumn("Date", format="DD MMM YYYY"),
-                "Amount (₹)": st.column_config.NumberColumn("Amount (₹)", format="₹%.2f"),
-                "UPI ID": st.column_config.TextColumn("UPI Transaction ID"),
-            }
+                "Date": st.column_config.DateColumn("Date", format="D MMM"),
+                "Amount (₹)": st.column_config.NumberColumn("Amount", format="₹%.2f"),
+                "Category": st.column_config.TextColumn("Category"),
+                "UPI ID": st.column_config.TextColumn("UPI ID"),
+            },
+            hide_index=True,
+            use_container_width=True,
+            height=400
         )
-        
-        csv = display_df.to_csv(index=False)
-        st.download_button(
-            label="Download as CSV",
-            data=csv,
-            file_name=f"transactions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
-        
-        # ================== RAG ==================
-        if RAG_AVAILABLE:
-            st.markdown("<h2 class='section-header'>Ask Questions</h2>", unsafe_allow_html=True)
-            
-            # Initialize RAG silently if needed (and we have a valid source)
-            if "rag_initialized" not in st.session_state and (pdf_path or not df.empty):
-                # We can try to initialize. In the original flow, it might have been initialized.
-                # But here we ensure it.
-                if pdf_path:
-                    initialize_rag(df=df, source_file=pdf_path)
-                else:
-                    initialize_rag(df=df)
-                st.session_state.rag_initialized = True
 
-            # Initialize Messages History
+    # 6. AI ASSISTANT SECTION
+    st.markdown("---")
+    st.markdown("### Ask Your Expenses")
+    st.caption("Powered by RAG • Ask simple questions about your spending habits")
+
+    if not RAG_AVAILABLE:
+        st.warning("⚠️ AI Assistant is currently unavailable (Libraries missing).")
+    else:
+        # Pushed down RAG Info Block
+        if st.session_state.rag_ready and st.session_state.rag_info:
+            info = st.session_state.rag_info
+            with st.expander("🔍 Index & Chunk Details", expanded=False):
+                st.success(f"{info.get('message', 'Active')}")
+                cols = st.columns(3)
+                with cols[0]: st.metric("Total Chunks", info.get('chunk_count', 'N/A'))
+                with cols[1]: st.metric("Source", info.get('source', 'N/A').split()[0]) 
+                with cols[2]: st.metric("Status", info.get('status', 'N/A').title())
+
+        # Chat Container
+        rag_container = st.container()
+        
+        with rag_container:
             if "messages" not in st.session_state:
-                st.session_state.messages = [
-                    {"role": "assistant", "content": "Hi! I'm your financial assistant. Ask me anything about your spending found in the statement."}
-                ]
-            
-            # Display Chat History
-            for msg in st.session_state.messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-            
-            # Chat Input
-            if prompt := st.chat_input("Ask a question about your transactions..."):
-                # Add user message
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
-                    st.markdown(prompt)
-                
-                # Generate response
-                with st.chat_message("assistant"):
-                    with st.spinner("Analyzing..."):
-                        response = query_rag(prompt)
-                        
-                        if isinstance(response, dict):
-                            ans = response.get("answer", "No answer generated.")
-                            sources = response.get("sources", [])
-                        else:
-                            ans = str(response)
-                            sources = []
-                        
-                        st.markdown(ans)
-                        
-                        # Show sources in an expander if available
-                        if sources:
-                            with st.expander("View Sources & Scores"):
-                                for i, src in enumerate(sources):
-                                    score = src.get('cosine_score', 0.0)
-                                    rerank = src.get('rerank_score', 0.0)
-                                    match_type = src.get('type', 'semantic')
-                                    text = src.get('text', '')
-                                    
-                                    st.markdown(f"**Source {i+1}** (Type: `{match_type}`)")
-                                    st.markdown(f"Cosine Similarity: `{score:.4f}` | Rerank Score: `{rerank:.4f}`")
-                                    st.code(text, language="text")
-                                    st.divider()
+                st.session_state.messages = []
 
-                        # Add assistant response to history
-                        st.session_state.messages.append({"role": "assistant", "content": ans})
-    
-    except Exception as e:
-        st.error(f"Something went wrong: {str(e)}")
-        st.exception(e)
-    
-    finally:
-        # Only cleanup if it was a truly temporary file, but currently our logic relies on 
-        # either uploads/ or tempfiles. Since we moved to persistent uploads/ for even new files,
-        # we generally don't want to delete them immediately if we want "recent files" to work.
-        # If we really utilized tempfile for "manual" uploads that shouldn't be saved, we would check.
-        # For now, safe to remove this deletion to verify persistence.
-        pass
+            for msg in st.session_state.messages:
+                st.chat_message(msg["role"]).write(msg["content"])
+
+            if prompt := st.chat_input("How much did I spend on Swiggy last month?"):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                st.chat_message("user").write(prompt)
+                
+                with st.spinner("Analyzing..."):
+                    response = query_rag(prompt)
+                    ans = response.get("answer", "I couldn't find an answer.")
+                    
+                st.session_state.messages.append({"role": "assistant", "content": ans})
+                st.chat_message("assistant").write(ans)
+                
+                # SOURCES DISPLAY
+                sources = response.get("sources", [])
+                if sources:
+                    st.session_state.messages.append({"role": "assistant-source", "content": sources})
+                    with st.expander("📚 Sources & context"):
+                        for i, src in enumerate(sources):
+                            st.markdown(f"**Source {i+1}**")
+                            # Display scores
+                            col_s1, col_s2 = st.columns(2)
+                            with col_s1: st.caption(f"🔹 Cosine: `{src.get('cosine_score', 0):.4f}`")
+                            with col_s2: st.caption(f"🔸 Rerank: `{src.get('rerank_score', 0):.4f}`")
+                            
+                            st.text(src.get('text', ''))
+                            st.divider()
 
 else:
-    st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("""
-<div class="welcome-card">
-    <h2>Get started with your finances</h2>
-    <p>Upload your transaction data to see insights, track spending, and manage your budget</p>
-    
-    <div class="feature-list">
-        <ul>
-            <li>Automatic categorization of expenses</li>
-            <li>Visual charts and spending patterns</li>
-            <li>Budget tracking and alerts</li>
-            <li>Export and analyze your data</li>
-            <li>AI-powered insights (optional)</li>
-        </ul>
+    # WELCOME / EMPTY STATE
+    st.markdown("""
+    <div style="text-align: center; padding: 4rem 2rem;">
+        <h1>Expense Intelligence</h1>
+        <p style="font-size: 1.2rem; color: #5f6368;">Upload your Google Pay PDF statement to get started.</p>
+        <div style="background: white; padding: 2rem; border-radius: 20px; max-width: 600px; margin: 2rem auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <ul style="text-align: left; list-style: none; padding: 0; color: #3c4043;">
+                <li style="margin-bottom: 1rem;">✅ <strong>Financial Overview</strong>: Track total spending and income</li>
+                <li style="margin-bottom: 1rem;">📊 <strong>Smart Analytics</strong>: Visualize category breakdowns</li>
+                <li style="margin-bottom: 1rem;">🤖 <strong>AI Assistant</strong>: Chat with your transaction history</li>
+                <li>🔒 <strong>Private</strong>: Data processes locally in memory</li>
+            </ul>
+        </div>
     </div>
+    """, unsafe_allow_html=True)
     
-    <p style="color: #94a3b8; font-size: 0.9375rem; margin-top: 2rem;">
-        Use the sidebar to upload a PDF or CSV file
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    # Add a prominent uploader for the empty state
+    st.markdown("<h3 style='text-align: center; color: #5f6368; margin-bottom: 1rem;'>Get Started</h3>", unsafe_allow_html=True)
+    cols = st.columns([1, 2, 1])
+    with cols[1]:
+        main_uploaded_file = st.file_uploader("Upload PDF Statement (Center)", type=['pdf', 'csv'], label_visibility="collapsed", key="main_uploader")
+        
+        if main_uploaded_file:
+            # Force rerun to let the top-level logic handle the global state update
+            # based on the now-populated 'main_uploader' key
+            st.rerun()

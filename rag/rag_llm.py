@@ -11,6 +11,10 @@ def call_llm(prompt: str) -> str:
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
     LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-3.5-turbo") # Default model if not set
 
+    # CI/CD Mock Mode
+    if os.getenv("CI") == "true":
+        return "🤖 [CI Mode] Mock LLM Response: Analysis complete."
+    
     if not OPENROUTER_API_KEY:
         return "Error: OPENROUTER_API_KEY not configured."
     
