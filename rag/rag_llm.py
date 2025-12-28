@@ -9,7 +9,7 @@ Handles external LLM API calls.
 
 def call_llm(prompt: str) -> str:
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-    LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-3.5-turbo") # Default model if not set
+    LLM_MODEL = os.getenv("LLM_MODEL", "xiaomi/mimo-v2-flash:free") # Default model if not set
 
     # CI/CD Mock Mode
     if os.getenv("CI") == "true":
