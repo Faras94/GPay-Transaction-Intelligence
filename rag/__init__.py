@@ -12,11 +12,10 @@ This package provides a loosely coupled RAG implementation with:
 """
 
 from .rag_pipeline import initialize_rag, query_rag
-from .rag_embeddings import file_hash, cache_path
+from .rag_embeddings import file_hash
 
 __all__ = [
     'initialize_rag',
     'query_rag',
-    'file_hash',
-    'cache_path'
+    'file_hash'
 ]

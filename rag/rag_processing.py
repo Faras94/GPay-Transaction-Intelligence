@@ -45,6 +45,7 @@ def dataframe_to_chunks(df) -> list:
     Returns:
         list: Text chunks representing transactions
     """
+    print(f"dataframe_to_chunks called with {len(df)} rows")
     chunks = []
     for _, row in df.iterrows():
         chunk = f"""
@@ -57,6 +58,7 @@ Category: {row.get('Category', 'N/A')}
 UPI ID: {row.get('UPI ID', 'N/A')}
 """.strip()
         chunks.append(chunk)
+    print(f"Returning {len(chunks)} chunks")
     return chunks
 
 
