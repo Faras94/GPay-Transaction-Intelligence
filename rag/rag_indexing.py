@@ -4,6 +4,7 @@ RAG Indexing Module
 Handles FAISS index creation and management.
 """
 
+import os
 import faiss
 import numpy as np
 from .rag_models import load_models
@@ -23,10 +24,15 @@ def build_index(file_path: str, chunks: list):
     """
     embedder, _ = load_models()
     local_dim = embedder.get_sentence_embedding_dimension()
-    h = file_hash(file_path)
+    
+    # Try to get a hash if file exists, otherwise use a default/none
+    h = None
+    if file_path and os.path.exists(file_path):
+        h = file_hash(file_path)
     
     # Generate fresh embeddings
-    embeddings = embedder.encode(chunks).astype("float32")
+    # Ensure numpy array even if mocked/returned as list
+    embeddings = np.array(embedder.encode(chunks)).astype("float32")
     faiss.normalize_L2(embeddings)
     
     index = faiss.IndexFlatIP(local_dim)

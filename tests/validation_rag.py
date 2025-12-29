@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rag.rag_pipeline import initialize_rag, query_rag
 
 class TestRAGPipeline(unittest.TestCase):
-    @patch("rag.rag_models.load_models")
+    @patch("rag.rag_indexing.load_models")
     @patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-dummy-key", "CI": "true"})
     def test_rag_end_to_end(self, mock_load_models):
         """Test RAG pipeline with mocked models and LLM."""
