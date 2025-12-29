@@ -37,41 +37,15 @@ def initialize_rag(file_path: str = None, df = None, source_file: str = None):
             if not chunks:
                 return False, {"message": "❌ No chunks generated from DataFrame"}
             
-            # Use caching if source_file is provided
-            if source_file and os.path.exists(source_file):
-                result = build_index(source_file, chunks)
-                INDEX = result["index"]
-                DOCS = result["docs"]
-                EMBEDDING_SOURCE = result["status"]
-                PDF_READY = True
-                
-                # Format message
-                if result["status"] == "cache_hit":
-                    result["message"] = f"⚡ Loaded {result['chunk_count']} transaction chunks from cache"
-                else:
-                    result["message"] = f"✅ Generated and cached {result['chunk_count']} transaction chunks"
-                
-                return True, result
-            else:
-                # Fallback: Build in-memory index without caching
-                embedder, _ = load_models()
-                local_dim = embedder.get_sentence_embedding_dimension()
-                
-                DOCS = chunks
-                embeddings = embedder.encode(DOCS).astype("float32")
-                faiss.normalize_L2(embeddings)
-
-                INDEX = faiss.IndexFlatIP(local_dim)
-                INDEX.add(embeddings)
-                EMBEDDING_SOURCE = "dataframe"
-                
-                PDF_READY = True
-                return True, {
-                    "status": "generated",
-                    "chunk_count": len(DOCS),
-                    "source": "DataFrame (in-memory, no cache)",
-                    "message": f"✅ Indexed {len(DOCS)} transactions (no cache)"
-                }
+            # Simple, non-cached indexing
+            result = build_index(source_file if source_file else "df_source", chunks)
+            INDEX = result["index"]
+            DOCS = result["docs"]
+            EMBEDDING_SOURCE = "dataframe"
+            PDF_READY = True
+            
+            result["message"] = f"✅ Indexed {result['chunk_count']} transaction chunks"
+            return True, result
             
         # Priority 2: Use PDF file if provided (Unstructured Data)
         elif file_path and os.path.exists(file_path):
@@ -84,16 +58,11 @@ def initialize_rag(file_path: str = None, df = None, source_file: str = None):
             result = build_index(file_path, chunks)
             INDEX = result["index"]
             DOCS = result["docs"]
-            EMBEDDING_SOURCE = result["status"]
+            EMBEDDING_SOURCE = "generated"
             PDF_READY = True
             GLOBAL_DF = None # No structured data available if raw PDF used
             
-            # Format message
-            if result["status"] == "cache_hit":
-                result["message"] = f"⚡ Loaded {result['chunk_count']} chunks from cache"
-            else:
-                result["message"] = f"✅ Generated and cached {result['chunk_count']} chunks"
-            
+            result["message"] = f"✅ Generated {result['chunk_count']} chunks"
             return True, result
         else:
             return False, {"message": "❌ No data provided for indexing"}
